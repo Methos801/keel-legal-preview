@@ -1,0 +1,92 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{max-width:46rem;margin:3rem auto;padding:0 1rem;font:1.06rem/1.5 system-ui;color:#203b39;background:#f7faf8}textarea,button{font:inherit}label,textarea{display:block}textarea{width:95%;min-height:5rem;margin:.5rem 0}button{padding:.4rem .8rem}pre{white-space:pre-wrap;overflow-wrap:anywhere}li{margin:.25rem 0}</style><title>Check a source ID</title></head><body><main><h1>Check a source ID</h1><p>The sample ledger contains one source, S0001. Check the draft, then replace S0001 with S9999 and check it again. This looks up source IDs; it does not verify page numbers, quotations or legal conclusions.</p><label for="legal-text">Workpaper</label><textarea id="legal-text">DRAFT: Delivery [S0001 p. 1].</textarea><button id="btn-legal-lint" onclick="runLegalLint()">Check source IDs</button><section id="legal-structured" aria-live="polite"></section><pre id="legal-output"></pre><div id="lab-decision-badge"></div><div id="lab-manifest-sha"></div><div id="lab-manifest-meta"></div><div id="lab-sources-count"></div><div id="lab-holds-list"></div></main><script>let legalReqSeq=0, projectSwitchSeq=0, currentStatus={session_id:'fixture'};
+const isSessionStale=()=>false;
+function setButtonBusy(id,busy){document.getElementById(id).disabled=busy;}
+function showToast(message){document.getElementById('legal-output').textContent=message;}
+async function api(method,url,data){const r=await fetch(url,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});return JSON.parse(await r.text());}
+    function escapeHtml(s) {
+      return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+    function renderLabState(data) {
+      const badge = document.getElementById('lab-decision-badge');
+      const shaEl = document.getElementById('lab-manifest-sha');
+      const metaEl = document.getElementById('lab-manifest-meta');
+      const cntEl = document.getElementById('lab-sources-count');
+      const holdsEl = document.getElementById('lab-holds-list');
+      const banksEl = document.getElementById('lab-banks-list');
+      const anomEl = document.getElementById('lab-anomalies-list');
+      if (!badge) return;
+
+      const dec = (data.decision || 'NONE').toUpperCase();
+      badge.textContent = dec;
+      badge.style.background = dec === 'PASS' ? 'rgba(16, 185, 129, 0.2)' : (dec === 'HOLD' ? 'rgba(245, 158, 11, 0.2)' : '');
+      badge.style.color = dec === 'PASS' ? '#34d399' : (dec === 'HOLD' ? '#fbbf24' : '');
+
+      cntEl.textContent = `${data.sources_count || 0} sources`;
+      shaEl.textContent = data.manifest_sha256 || (data.available === false ? 'Unavailable.' : 'Not built yet.');
+
+      const banks = data.banks || [];
+      const totalEstTokens = (data.keel_index && data.keel_index.est_tokens)
+        ? data.keel_index.est_tokens
+        : banks.reduce((acc, b) => acc + (Number(b.est_tokens) || 0), 0);
+      const timingMs = data.timing_ms ? `${Math.round(Number(data.timing_ms))} ms` : '';
+      if (metaEl) {
+        const parts = [];
+        if (totalEstTokens) parts.push(`~${totalEstTokens} est. tokens`);
+        if (timingMs) parts.push(`build ${timingMs}`);
+        metaEl.textContent = parts.join(' · ');
+      }
+
+      const holds = data.holds || [];
+      if (holdsEl) {
+        if (dec === 'HOLD' || holds.length) {
+          holdsEl.innerHTML = holds.length
+            ? holds.map(h => {
+                if (typeof h === 'string' || !h) {
+                  return `<div class="card" style="border-left:3px solid var(--accent-rose); background:rgba(239, 68, 68, 0.08);"><div class="card-title" style="color:#fca5a5;"><span>HOLD Gate</span><span class="badge">HOLD</span></div><div class="card-sub" style="color:#fecaca;">${escapeHtml(String(h || ''))}</div></div>`;
+                }
+                const header = [h.source_id, h.rel_path].filter(Boolean).join(' · ');
+                const codePrefix = h.code ? ('[' + h.code + '] ') : '';
+                const detail = h.reason || h.message || h.detail || JSON.stringify(h);
+                return `<div class="card" style="border-left:3px solid var(--accent-rose); background:rgba(239, 68, 68, 0.08);"><div class="card-title" style="color:#fca5a5;"><span>${escapeHtml(header ? ('HOLD Gate · ' + header) : 'HOLD Gate')}</span><span class="badge">${escapeHtml(String(h.severity || 'HOLD'))}</span></div><div class="card-sub" style="color:#fecaca;">${escapeHtml(codePrefix + detail)}</div></div>`;
+              }).join('')
+            : `<div class="card" style="border-left:3px solid var(--accent-amber);"><div class="card-sub" style="color:#fbbf24;">Build decision is HOLD. Review anomalies or source directory contents.</div></div>`;
+        } else {
+          holdsEl.innerHTML = '';
+        }
+      }
+
+    }
+    async function runLegalLint() {
+      const reqSeq = ++legalReqSeq;
+      const targetSessionId = (currentStatus && currentStatus.session_id) || '';
+      const switchSeq = projectSwitchSeq;
+      setButtonBusy('btn-legal-lint', true, 'Linting…');
+      try {
+        const text = document.getElementById('legal-text').value;
+        const res = await api('POST', '/api/legal/lint', { text });
+        if (reqSeq !== legalReqSeq || isSessionStale(targetSessionId, switchSeq)) return;
+        const structEl = document.getElementById('legal-structured');
+        const outEl = document.getElementById('legal-output');
+        if (res.error) {
+          structEl.innerHTML = `<div class="card" style="border-left:3px solid var(--accent-rose);"><div class="card-sub" style="color:#fca5a5;">${escapeHtml(res.error)}</div></div>`;
+          outEl.style.display = 'none';
+          outEl.textContent = res.error;
+          showToast(res.error, 'error');
+          return;
+        }
+        const ids = res.source_ids || [];
+        const findings = res.findings || [];
+        const list = ids.map(x => `<li><strong>${escapeHtml(x.id)}</strong>: ${x.found ? 'Found in the sample ledger' : 'Not found in the sample ledger'}</li>`).join('');
+        const notes = findings.map(f => `<li>${escapeHtml(f.rule ? '[' + f.rule + '] ' : '')}${escapeHtml(f.detail || f.message || String(f))}</li>`).join('');
+        structEl.innerHTML = `<h2>Source lookup</h2>${list ? `<ul>${list}</ul>` : '<p>No source ID to look up.</p>'}${notes ? `<h3>Draft notes</h3><ul>${notes}</ul>` : ''}<details><summary>Technical details</summary><pre>${escapeHtml(JSON.stringify(res, null, 2))}</pre></details>`;
+        outEl.style.display = 'none';
+        outEl.textContent = JSON.stringify(res, null, 2);
+      } finally {
+        setButtonBusy('btn-legal-lint', false);
+      }
+    }</script></body></html>
