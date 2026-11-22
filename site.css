@@ -5,3 +5,27 @@
 @media(max-width:760px){.hero .shell,.bodygrid{grid-template-columns:1fr;gap:1.6rem}.shell{width:calc(100% - 2rem)}.hero .intro{max-width:55ch}.bodygrid{padding-block:2.3rem}.hero figure img{max-height:none}.navwalk{display:none}footer .shell{align-items:start;flex-direction:column}.hero h1{font-size:clamp(2.3rem,8vw,3.4rem)}}
 
 .paper p code{white-space:nowrap}.hero figcaption a{color:inherit}.bodygrid a:hover,footer a:hover{text-decoration-thickness:2px}
+
+/* Keep the existing grid, but don't stack page-level padding inside a section. */
+.workflow > .shell > .bodygrid { padding-block:.65rem .6rem; gap:clamp(1.35rem,3vw,2.8rem); }
+.workflow > .shell > .bodygrid h3:first-child { margin-top:0; }
+.workflow > .shell > .bodygrid > section > :last-child { margin-bottom:0; }
+.workflow > .shell > :last-child { margin-bottom:0; }
+@media(min-width:761px){
+  .workflow > .shell > .bodygrid > section + section { border-top:0; padding-top:0; border-inline-start:1px solid #cbdad3; padding-inline-start:clamp(1rem,2vw,1.75rem); }
+}
+@media(max-width:760px){
+  .workflow > .shell { padding-block:1.75rem; }
+  .workflow > .shell > .bodygrid > section + section { padding-top:1rem; }
+}
+
+/* Full-width detail view; the ledger inset is a companion, not the destination. */
+.studio-proof { padding-block:clamp(1.5rem,3vw,2.35rem); border-top:1px solid #cbdad3; }
+.studio-proof h2 { margin-bottom:.6rem; }
+.studio-proof-grid { display:grid; grid-template-columns:minmax(0, .8fr) minmax(0, 1.2fr); gap:clamp(1rem,3vw,2.2rem); align-items:start; margin:1rem 0 1.3rem; }
+.studio-proof-grid figure { max-width:340px; }
+.studio-proof-grid p { margin-bottom:0; }
+.studio-proof-grid blockquote { margin:.55rem 0; }
+.studio-proof-image { max-width:1120px; }
+@media(max-width:760px){.studio-proof-grid{grid-template-columns:minmax(0,1fr)}}
+
